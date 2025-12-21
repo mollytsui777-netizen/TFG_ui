@@ -1,4 +1,4 @@
-<!DOCTYPE html>  
+<!DOCTYPE html>
 <html lang="zh">  
 <head>  
     <meta charset="UTF-8">  
@@ -232,6 +232,10 @@
             box-shadow: 0 0 30px rgba(0, 229, 255, 0.4);  
             margin-bottom: 20px;  
             border: 2px solid var(--glass-border);  
+            width: 640px;  /* 添加：统一视频显示尺寸 */  
+            height: 480px; /* 添加：统一视频显示尺寸 */  
+            object-fit: contain; /* 添加：保持视频比例 */  
+            background: #000; /* 添加：黑色背景 */  
         }  
   
         .form-section {  
@@ -376,6 +380,23 @@
             from { transform: translateX(0); opacity: 1; }  
             to { transform: translateX(100%); opacity: 0; }  
         }  
+        
+        /* 错误样式 */  
+        .error-input {  
+            border-color: #ff4757 !important;  
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.3) !important;  
+        }  
+        
+        .error-message {  
+            color: #ff4757;  
+            font-size: 12px;  
+            margin-top: 5px;  
+            display: none;  
+        }  
+        
+        .required-star {  
+            color: #ff4757;  
+        }  
     </style>  
 </head>  
 <body class="subpage-bg">  
@@ -388,13 +409,17 @@
         <button onclick="goHome()" class="back-btn">← 返回首页</button>  
         <h2>视频生成界面</h2>  
     </div>  
-      
+  
     <div class="video-page-container">  
         <!-- 左侧：生成结果视频 -->  
         <div class="video-display">  
-            <video id="outputVideo" controls width="420">  
+            <video id="outputVideo" controls>  
                 <source src="{{ url_for('static', filename='videos/sample.mp4') }}" type="video/mp4">  
+                您的浏览器不支持 video 标签。  
             </video>  
+            <div id="videoStatus" style="text-align: center; color: var(--accent-color); font-size: 14px; margin-top: 10px;">  
+                准备生成视频  
+            </div>  
         </div>  
   
         <!-- 右侧：输入框 -->  
@@ -402,23 +427,34 @@
             <form id="videoForm">  
                 <div class="form-group">  
                     <label>模型名称</label>  
-                    <select name="model_name">  
-                        <option value="model1">Model 1</option>  
-                        <option value="model2">Model 2</option>  
+                    <select name="model_name" id="model_name" onchange="toggleModelOptions()">  
+                        <!-- 添加：TalkingGaussian 选项 -->  
+                        <option value="TalkingGaussian">TalkingGaussian</option>  
                         <option value="SyncTalk">SyncTalk</option>  
                     </select>  
                 </div>  
   
                 <div class="form-group">  
-                    <label>模型目录地址</label>  
-                    <input type="text" name="model_param" placeholder="请输入模型目录路径">  
+                    <label>模型目录地址 <span class="required-star">*</span></label>  
+                    <div style="display: flex; gap: 10px;">  
+                        <input type="text" name="model_param" id="model_param" placeholder="请输入模型目录路径" style="flex: 1;">  
+                        <button type="button" class="browse-btn" onclick="selectModelPath()" style="padding: 10px 15px; border: 1px solid var(--glass-border); border-radius: 8px; background: rgba(255,255,255,0.1); color: var(--text-primary); cursor: pointer;">浏览</button>  
+                    </div>  
+                    <div id="model_param_error" class="error-message">请输入模型目录地址</div>  
+                    <small style="color: var(--text-secondary); font-size: 12px; margin-top: 5px; display: block;">  
+                        选择训练好的模型文件夹路径，例如：output/talking_May  
+                    </small>  
                 </div>  
   
                 <div class="form-group">  
-                    <label>参考音频地址</label>  
-                    <input type="text" name="ref_audio" placeholder="请输入音频路径">  
+                    <label>参考音频地址 <span class="required-star">*</span></label>  
+                    <input type="text" name="ref_audio" id="ref_audio" placeholder="请输入音频路径">  
+                    <div id="ref_audio_error" class="error-message">请输入参考音频地址</div>  
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 5px;">  
+                        例如：static/audios/test.wav  
+                    </small>  
                 </div>  
-                  
+  
                 <div class="form-group">  
                     <label>GPU选择</label>  
                     <select name="gpu_choice">  
@@ -432,7 +468,21 @@
                     <textarea name="target_text" placeholder="留空则直接使用参考音频"></textarea>  
                 </div>  
   
-                <button type="submit" class="generate-btn">🚀 生成视频</button>  
+                <!-- 添加：渲染质量等级选择 -->  
+                <div class="form-group">  
+                    <label>渲染质量等级</label>  
+                    <select name="sh_degree" id="sh_degree">  
+                        <option value="0">极速模式（最快，基础颜色）</option>  
+                        <option value="1">标准模式（平衡画质与速度）</option>  
+                        <option value="2" selected>高保真模式（推荐，完整光照）</option>  
+                        <option value="3">最高保真模式（最慢，最佳画质）</option>  
+                    </select>  
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 5px;">  
+                        调节渲染细节等级。数值越大画质越好但速度越慢。  
+                    </small>  
+                </div>  
+  
+                <button type="submit" class="generate-btn"> 生成视频</button>  
             </form>  
         </div>  
     </div>  
@@ -443,7 +493,7 @@
             // 显示加载动画  
             const loadingOverlay = document.getElementById('loadingOverlay');  
             loadingOverlay.classList.add('active');  
-              
+  
             // 清除可能的缓存问题  
             if ('serviceWorker' in navigator) {  
                 navigator.serviceWorker.getRegistrations().then(function(registrations) {  
@@ -452,52 +502,287 @@
                     }  
                 });  
             }  
-              
+  
             // 强制刷新首页  
             setTimeout(() => {  
                 window.location.href = '/?t=' + new Date().getTime();  
             }, 300);  
         }  
   
-        document.getElementById('videoForm').addEventListener('submit', function (e) {  
-            e.preventDefault();  
-            const formData = new FormData(this);  
+        // 模型路径选择  
+        function selectModelPath() {  
+            // 创建文件选择器  
+            const input = document.createElement('input');  
+            input.type = 'file';  
+            input.style.display = 'none';  
   
-            // 显示加载动画  
-            const loadingOverlay = document.getElementById('loadingOverlay');  
-            loadingOverlay.classList.add('active');  
+            // 尝试允许选择文件夹（浏览器兼容性）  
+            if (typeof input.webkitdirectory !== 'undefined') {  
+                input.webkitdirectory = true;  
+            } else if (typeof input.directory !== 'undefined') {  
+                input.directory = true;  
+            }  
   
-            fetch('/video_generation', {  
-                method: 'POST',  
-                body: formData  
-            })  
-                .then(res => res.json())  
-                .then(data => {  
-                    console.log("后端返回:", data);  
-                    if (data.status === 'success') {  
-                        const videoEl = document.getElementById('outputVideo');  
-                        const newSrc = data.video_path + '?t=' + new Date().getTime();  
-                        videoEl.src = newSrc;  
-                        videoEl.load();  
-                        videoEl.play().catch(err => console.warn('自动播放被阻止:', err));  
-                          
-                        // 创建成功提示  
-                        showNotification('视频生成完成！', 'success');  
+            input.onchange = function(e) {  
+                if (e.target.files.length > 0) {  
+                    // 获取文件路径  
+                    let filePath = '';  
+                    if (e.target.files[0].webkitRelativePath) {  
+                        filePath = e.target.files[0].webkitRelativePath;  
+                        const folderPath = filePath.substring(0, filePath.lastIndexOf('/'));  
+                        document.getElementById('model_param').value = folderPath;  
+                        clearInputError('model_param'); // 清除错误状态  
+                    } else if (e.target.files[0].path) {  
+                        filePath = e.target.files[0].path;  
+                        // 处理Windows路径  
+                        const folderPath = filePath.replace(/\\/g, '/');  
+                        const modelPath = folderPath.substring(folderPath.lastIndexOf('/') + 1);  
+                        document.getElementById('model_param').value = modelPath;  
+                        clearInputError('model_param'); // 清除错误状态  
                     } else {  
-                        showNotification('视频生成失败！', 'error');  
+                        // 获取文件名并提示用户  
+                        const fileName = e.target.files[0].name;  
+                        const folderName = fileName.substring(0, fileName.lastIndexOf('.'));  
+                        document.getElementById('model_param').value = folderName;  
+                        clearInputError('model_param'); // 清除错误状态  
+                        showNotification('请确保选择的文件夹包含模型文件', 'info');  
                     }  
-                })  
-                .catch(err => {  
-                    console.error('错误:', err);  
-                    showNotification('生成失败，请重试', 'error');  
-                })  
-                .finally(() => {  
-                    // 隐藏加载动画  
-                    setTimeout(() => {  
-                        loadingOverlay.classList.remove('active');  
-                    }, 500);  
-                });  
-        });  
+                }  
+            };  
+  
+            document.body.appendChild(input);  
+            input.click();  
+            setTimeout(() => {  
+                document.body.removeChild(input);  
+            }, 100);  
+        }  
+  
+        // 根据选择的模型显示/隐藏相关选项  
+        function toggleModelOptions() {  
+            const modelName = document.getElementById('model_name').value;  
+            // 可以根据需要添加特定于模型的控制逻辑  
+        }  
+  
+        // 更新视频状态显示  
+        function updateVideoStatus(status, isError = false) {  
+            const statusEl = document.getElementById('videoStatus');  
+            if (statusEl) {  
+                statusEl.textContent = status;  
+                statusEl.style.color = isError ? '#ff4757' : 'var(--accent-color)';  
+            }  
+        }  
+  
+        // 重置视频显示  
+        function resetVideoDisplay() {  
+            const videoEl = document.getElementById('outputVideo');  
+            const statusEl = document.getElementById('videoStatus');  
+            
+            // 重置视频源到默认  
+            const defaultSrc = "{{ url_for('static', filename='videos/sample.mp4') }}";  
+            videoEl.src = defaultSrc + '?t=' + new Date().getTime();  
+            videoEl.load();  
+            videoEl.pause(); // 暂停播放
+            videoEl.currentTime = 0; // 重置到开头
+            
+            // 重置状态显示  
+            if (statusEl) {  
+                statusEl.textContent = '准备生成视频';  
+                statusEl.style.color = 'var(--accent-color)';  
+            }  
+        }  
+  
+        // 显示表单错误  
+        function showInputError(inputId, message) {  
+            const input = document.getElementById(inputId);  
+            const errorDiv = document.getElementById(inputId + '_error');  
+            
+            if (input && errorDiv) {  
+                input.classList.add('error-input');  
+                errorDiv.textContent = message;  
+                errorDiv.style.display = 'block';  
+            }  
+        }  
+  
+        // 清除表单错误  
+        function clearInputError(inputId) {  
+            const input = document.getElementById(inputId);  
+            const errorDiv = document.getElementById(inputId + '_error');  
+            
+            if (input && errorDiv) {  
+                input.classList.remove('error-input');  
+                errorDiv.style.display = 'none';  
+            }  
+        }  
+  
+        // 表单验证  
+        function validateVideoForm() {  
+            let isValid = true;  
+            
+            // 验证模型目录地址  
+            const modelParamInput = document.getElementById('model_param');  
+            const modelParamValue = modelParamInput.value.trim();  
+            
+            if (!modelParamValue) {  
+                showInputError('model_param', '请输入模型目录地址');  
+                isValid = false;  
+            } else {  
+                clearInputError('model_param');  
+            }  
+            
+            // 验证参考音频地址  
+            const refAudioInput = document.getElementById('ref_audio');  
+            const refAudioValue = refAudioInput.value.trim();  
+            
+            if (!refAudioValue) {  
+                showInputError('ref_audio', '请输入参考音频地址');  
+                isValid = false;  
+            } else {  
+                clearInputError('ref_audio');  
+            }  
+            
+            return isValid;  
+        }  
+  
+            document.getElementById('videoForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        // 首先验证表单
+        if (!validateVideoForm()) {
+            showNotification('请填写所有必填字段', 'error');
+            return; // 验证失败，停止提交
+        }
+
+        const formData = new FormData(this);
+
+        // 更新状态
+        updateVideoStatus('正在生成视频...');
+
+        // 显示加载动画
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        loadingOverlay.classList.add('active');
+
+        fetch('/video_generation', {
+            method: 'POST',
+            body: formData
+        })
+            .then(res => {
+                // 首先检查HTTP状态
+                if (!res.ok) {
+                    throw new Error(`HTTP错误: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log("后端返回:", data);
+
+                // 关键修改：更严格的成功判断
+                // 根据后端代码，验证失败时会返回默认路径但状态可能还是success
+                // 我们需要检查返回的视频路径是否是默认的out.mp4
+
+                const videoPath = data.video_path || '';
+                const status = data.status || '';
+                const message = data.message || '';
+
+                // 情况1：明确成功且有有效视频路径
+                if (status === 'success' &&
+                    videoPath &&
+                    !videoPath.includes('out.mp4') &&
+                    !videoPath.includes('static/videos/out.mp4')) {
+
+                    // 真正的成功：不是默认的out.mp4
+                    const videoEl = document.getElementById('outputVideo');
+                    const newSrc = videoPath + '?t=' + new Date().getTime();
+                    videoEl.src = newSrc;
+                    videoEl.load();
+                    videoEl.play().catch(err => console.warn('自动播放被阻止:', err));
+
+                    // 更新状态
+                    updateVideoStatus('视频生成完成！');
+
+                    // 创建成功提示
+                    showNotification('视频生成完成！', 'success');
+
+                }
+                // 情况2：明确错误
+                else if (status === 'error' || message.includes('失败') || message.includes('错误')) {
+
+                    resetVideoDisplay();
+
+                    // 从错误信息中提取有用的部分
+                    let errorMsg = message || '未知错误';
+                    if (errorMsg.includes('模型目录不存在')) {
+                        errorMsg = '模型目录不存在，请检查模型路径';
+                    } else if (errorMsg.includes('检查点文件不存在')) {
+                        errorMsg = '模型文件不完整，请检查模型目录';
+                    } else if (errorMsg.includes('格式错误')) {
+                        errorMsg = '路径格式错误，请使用正确的路径格式';
+                    }
+
+                    updateVideoStatus('生成失败: ' + errorMsg, true);
+                    showNotification('视频生成失败！' + errorMsg, 'error');
+
+                }
+                // 情况3：返回了默认的out.mp4路径（后端验证失败但返回了默认视频）
+                else if (videoPath.includes('out.mp4') || videoPath.includes('static/videos/out.mp4')) {
+
+                    resetVideoDisplay();
+
+                    // 检查是否有错误消息
+                    if (message) {
+                        let errorMsg = message;
+                        if (errorMsg.includes('模型目录不存在')) {
+                            errorMsg = '模型目录不存在，请检查模型路径';
+                        }
+                        updateVideoStatus('生成失败: ' + errorMsg, true);
+                        showNotification('视频生成失败！' + errorMsg, 'error');
+                    } else {
+                        // 没有错误消息但返回了默认视频，可能是验证失败
+                        updateVideoStatus('生成失败：请检查模型和音频路径', true);
+                        showNotification('视频生成失败：请检查模型和音频路径是否正确', 'error');
+                    }
+
+                }
+                // 情况4：其他情况（可能是后端bug）
+                else {
+
+                    resetVideoDisplay();
+
+                    if (videoPath) {
+                        // 有视频路径但不是默认的，尝试播放但显示警告
+                        const videoEl = document.getElementById('outputVideo');
+                        const newSrc = videoPath + '?t=' + new Date().getTime();
+                        videoEl.src = newSrc;
+                        videoEl.load();
+                        videoEl.play().catch(err => console.warn('自动播放被阻止:', err));
+
+                        updateVideoStatus('视频已生成（状态未知）');
+                        showNotification('视频已生成，但服务器返回状态异常', 'warning');
+                    } else {
+                        // 没有视频路径
+                        updateVideoStatus('生成失败：服务器未返回视频路径', true);
+                        showNotification('生成失败：服务器未返回视频路径', 'error');
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('请求错误:', err);
+
+                // 网络错误，重置视频显示
+                resetVideoDisplay();
+
+                // 更新状态
+                updateVideoStatus('网络错误，请重试', true);
+
+                // 显示错误通知
+                showNotification('生成失败，请重试', 'error');
+            })
+            .finally(() => {
+                // 隐藏加载动画
+                setTimeout(() => {
+                    loadingOverlay.classList.remove('active');
+                }, 500);
+            });
+    });
   
         // 通知提示函数  
         function showNotification(message, type) {  
@@ -516,9 +801,9 @@
                 font-weight: bold;  
             `;  
             notification.textContent = message;  
-              
+  
             document.body.appendChild(notification);  
-              
+  
             setTimeout(() => {  
                 notification.style.animation = 'slideOut 0.3s ease';  
                 setTimeout(() => notification.remove(), 300);  
@@ -534,35 +819,54 @@
                 body.classList.add('light-theme');  
             }  
             
+            // 监听输入框变化，清除错误状态  
+            const modelParamInput = document.getElementById('model_param');  
+            if (modelParamInput) {  
+                modelParamInput.addEventListener('input', function() {  
+                    if (this.value.trim()) {  
+                        clearInputError('model_param');  
+                    }  
+                });  
+            }  
+            
+            const refAudioInput = document.getElementById('ref_audio');  
+            if (refAudioInput) {  
+                refAudioInput.addEventListener('input', function() {  
+                    if (this.value.trim()) {  
+                        clearInputError('ref_audio');  
+                    }  
+                });  
+            }  
+  
             // 恢复全屏状态  
             const wasFullscreen = localStorage.getItem('isFullscreen') === 'true';  
             if (wasFullscreen && !document.fullscreenElement) {  
                 // 如果之前是全屏状态，自动进入全屏  
                 document.documentElement.requestFullscreen().catch(e => {  
                     console.log('自动全屏失败:', e);  
-                const restoreFullscreen = () => {
-                document.documentElement.requestFullscreen().catch(e => console.error(e));
-                // 移除监听器，确保只触发一次
-                document.removeEventListener('click', restoreFullscreen);
-                document.removeEventListener('touchstart', restoreFullscreen);
-            };
-
-            // 监听点击和触摸（适配移动端）
-            document.addEventListener('click', restoreFullscreen, { once: true });
-            document.addEventListener('touchstart', restoreFullscreen, { once: true });
-            
-           
-           showNotification('点击任意位置恢复全屏', 'info'); 
-        });
-    }
-            
+                const restoreFullscreen = () => {  
+                document.documentElement.requestFullscreen().catch(e => console.error(e));  
+                // 移除监听器，确保只触发一次  
+                document.removeEventListener('click', restoreFullscreen);  
+                document.removeEventListener('touchstart', restoreFullscreen);  
+            };  
+  
+            // 监听点击和触摸（适配移动端）  
+            document.addEventListener('click', restoreFullscreen, { once: true });  
+            document.addEventListener('touchstart', restoreFullscreen, { once: true });  
+  
+  
+           showNotification('点击任意位置恢复全屏', 'info');  
+        });  
+    }  
+  
             // 监听全屏状态变化  
             document.addEventListener('fullscreenchange', function() {  
                 const isFullscreen = !!document.fullscreenElement;  
                 localStorage.setItem('isFullscreen', isFullscreen.toString());  
             });  
-            
-        }); 
+  
+        });  
     </script>  
 </body>  
 </html>
