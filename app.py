@@ -181,4 +181,6 @@ def upload_voice_clone():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port = 5001)
+    # host='0.0.0.0' 允许从外部访问（华为云服务器需要）
+    # debug=True 开发模式，生产环境应设置为False
+    app.run(debug=True, host='0.0.0.0', port=5001)

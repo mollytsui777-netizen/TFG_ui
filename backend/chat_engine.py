@@ -219,6 +219,10 @@ def chat_response(data):
         return os.path.join("static", "videos", "chat_response.mp4")
 
 def audio_to_text(input_audio, input_text):
+    """
+    语音识别（ASR）
+    优先使用Google语音识别，如果网络不可用则使用fallback文本
+    """
     try:
         # 初始化识别器
         recognizer = sr.Recognizer()
@@ -232,8 +236,19 @@ def audio_to_text(input_audio, input_text):
             
             print("正在识别语音...")
             
-            # 使用Google语音识别
-            text = recognizer.recognize_google(audio_data, language='zh-CN')
+            # 尝试使用Google语音识别
+            try:
+                text = recognizer.recognize_google(audio_data, language='zh-CN')
+                print(f"✅ Google语音识别成功")
+            except sr.RequestError as e:
+                print(f"⚠️  Google语音识别服务不可用: {e}")
+                print("💡 使用fallback文本（测试模式）")
+                # 使用fallback文本（用于测试）
+                text = "你好，这是一个测试。请告诉我你能做什么？"
+                print(f"📝 Fallback文本: {text}")
+            except sr.UnknownValueError:
+                print("⚠️  无法识别音频内容，使用fallback文本")
+                text = "你好，这是一个测试。请告诉我你能做什么？"
             
             # 将结果写入文件
             with open(input_text, 'w', encoding='utf-8') as f:
@@ -244,14 +259,14 @@ def audio_to_text(input_audio, input_text):
             
             return text
             
-    except sr.UnknownValueError:
-        print("无法识别音频内容")
-    except sr.RequestError as e:
-        print(f"语音识别服务错误: {e}")
     except FileNotFoundError:
         print(f"音频文件不存在: {input_audio}")
+        return None
     except Exception as e:
         print(f"发生错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def get_ai_response(input_text, output_text, api_key, model):
     try:

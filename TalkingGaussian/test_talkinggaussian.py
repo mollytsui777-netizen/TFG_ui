@@ -166,6 +166,52 @@ def main():
 
     args = parser.parse_args()
 
+    # 规范化路径：将相对路径转换为绝对路径（相对于脚本所在目录）
+    # 这样可以确保无论从哪里调用脚本，路径都能正确解析
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 处理音频文件路径
+    if not os.path.isabs(args.audio_file):
+        # 如果是相对路径，尝试相对于脚本目录和当前工作目录
+        if os.path.exists(os.path.join(script_dir, args.audio_file)):
+            args.audio_file = os.path.abspath(os.path.join(script_dir, args.audio_file))
+        elif os.path.exists(args.audio_file):
+            args.audio_file = os.path.abspath(args.audio_file)
+        else:
+            # 尝试相对于项目根目录（脚本目录的父目录）
+            project_root = os.path.dirname(script_dir)
+            potential_path = os.path.join(project_root, args.audio_file)
+            if os.path.exists(potential_path):
+                args.audio_file = os.path.abspath(potential_path)
+    else:
+        args.audio_file = os.path.abspath(args.audio_file)
+    
+    # 处理数据集路径（相对于脚本目录）
+    if not os.path.isabs(args.dataset_path):
+        dataset_path = os.path.join(script_dir, args.dataset_path)
+        if os.path.exists(dataset_path):
+            args.dataset_path = os.path.abspath(dataset_path)
+        elif os.path.exists(args.dataset_path):
+            args.dataset_path = os.path.abspath(args.dataset_path)
+    else:
+        args.dataset_path = os.path.abspath(args.dataset_path)
+    
+    # 处理模型路径（相对于脚本目录）
+    if not os.path.isabs(args.model_path):
+        model_path = os.path.join(script_dir, args.model_path)
+        if os.path.exists(model_path):
+            args.model_path = os.path.abspath(model_path)
+        elif os.path.exists(args.model_path):
+            args.model_path = os.path.abspath(args.model_path)
+    else:
+        args.model_path = os.path.abspath(args.model_path)
+    
+    # 处理输出目录（相对于脚本目录）
+    if not os.path.isabs(args.output_dir):
+        args.output_dir = os.path.abspath(os.path.join(script_dir, args.output_dir))
+    else:
+        args.output_dir = os.path.abspath(args.output_dir)
+
     if not os.path.exists(args.audio_file):
         print(f"错误: 音频文件 {args.audio_file} 不存在")
         return
