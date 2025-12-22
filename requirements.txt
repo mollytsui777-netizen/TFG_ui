@@ -1,3 +1,8 @@
 Flask==3.0.3
-SpeechRecognition==3.11.0
+SpeechRecognition>=3.14.4
 zhipuai
+sniffio
+# Python 3.13兼容性依赖（SpeechRecognition会自动安装）
+# standard-aifc>=3.13.0
+# audioop-lts>=0.2.2
+# standard-chunk>=3.13.0

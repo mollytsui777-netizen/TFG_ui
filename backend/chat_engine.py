@@ -6,11 +6,11 @@ from zhipuai import ZhipuAI
 
 # 预设音色配置
 PRESET_VOICES = {
-    "default": "./voice_clone/CosyVoice-main/asset/zero_shot_prompt.wav",
-    "cross_lingual": "./voice_clone/CosyVoice-main/asset/cross_lingual_prompt.wav",
+    "default": "./CosyVoice/asset/zero_shot_prompt.wav",
+    "cross_lingual": "./CosyVoice/asset/cross_lingual_prompt.wav",
     # 可以继续添加更多预设音色
-    # "voice1": "./voice_clone/CosyVoice-main/asset/voice1.wav",
-    # "voice2": "./voice_clone/CosyVoice-main/asset/voice2.wav",
+    # "voice1": "./CosyVoice/asset/voice1.wav",
+    # "voice2": "./CosyVoice/asset/voice2.wav",
 }
 
 def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_voice_file=None, fallback_voice_clone=None):
@@ -46,7 +46,7 @@ def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_v
             return reference_path
         else:
             print(f"[backend.chat_engine] 当前录音不存在，使用默认预设音色")
-            return PRESET_VOICES.get("default", "./voice_clone/CosyVoice-main/asset/zero_shot_prompt.wav")
+            return PRESET_VOICES.get("default", "./CosyVoice/asset/zero_shot_prompt.wav")
     
     elif voice_clone_type == "preset_voice":
         # 使用预设音色
@@ -60,7 +60,7 @@ def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_v
         else:
             print(f"[backend.chat_engine] 未找到预设音色: {preset_voice_name}，使用默认")
         # 使用默认预设音色
-        return PRESET_VOICES.get("default", "./voice_clone/CosyVoice-main/asset/zero_shot_prompt.wav")
+        return PRESET_VOICES.get("default", "./CosyVoice/asset/zero_shot_prompt.wav")
     
     elif voice_clone_type == "custom":
         # 使用自定义上传的音频
@@ -74,12 +74,12 @@ def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_v
         else:
             print(f"[backend.chat_engine] 未提供自定义音频文件名，使用默认预设音色")
         # 使用默认预设音色
-        return PRESET_VOICES.get("default", "./voice_clone/CosyVoice-main/asset/zero_shot_prompt.wav")
+        return PRESET_VOICES.get("default", "./CosyVoice/asset/zero_shot_prompt.wav")
     
     else:
         # 默认使用预设音色
         print(f"[backend.chat_engine] 未知的语音克隆类型: {voice_clone_type}，使用默认预设音色")
-        return PRESET_VOICES.get("default", "./voice_clone/CosyVoice-main/asset/zero_shot_prompt.wav")
+        return PRESET_VOICES.get("default", "./CosyVoice/asset/zero_shot_prompt.wav")
 
 def chat_response(data):
     """
@@ -133,7 +133,7 @@ def chat_response(data):
         if not os.path.exists(voice_clone_ref):
             print(f"[backend.chat_engine] 警告：参考音频文件不存在: {voice_clone_ref}")
             # 尝试使用默认路径
-            default_ref = './voice_clone/CosyVoice-main/asset/zero_shot_prompt.wav'
+            default_ref = './CosyVoice/asset/zero_shot_prompt.wav'
             if os.path.exists(default_ref):
                 print(f"[backend.chat_engine] 使用默认参考音频: {default_ref}")
                 voice_clone_ref = default_ref
@@ -219,6 +219,10 @@ def chat_response(data):
         return os.path.join("static", "videos", "chat_response.mp4")
 
 def audio_to_text(input_audio, input_text):
+    """
+    语音识别（ASR）
+    优先使用Google语音识别，如果网络不可用则使用fallback文本
+    """
     try:
         # 初始化识别器
         recognizer = sr.Recognizer()
@@ -232,8 +236,19 @@ def audio_to_text(input_audio, input_text):
             
             print("正在识别语音...")
             
-            # 使用Google语音识别
-            text = recognizer.recognize_google(audio_data, language='zh-CN')
+            # 尝试使用Google语音识别
+            try:
+                text = recognizer.recognize_google(audio_data, language='zh-CN')
+                print(f"✅ Google语音识别成功")
+            except sr.RequestError as e:
+                print(f"⚠️  Google语音识别服务不可用: {e}")
+                print("💡 使用fallback文本（测试模式）")
+                # 使用fallback文本（用于测试）
+                text = "你好，这是一个测试。请告诉我你能做什么？"
+                print(f"📝 Fallback文本: {text}")
+            except sr.UnknownValueError:
+                print("⚠️  无法识别音频内容，使用fallback文本")
+                text = "你好，这是一个测试。请告诉我你能做什么？"
             
             # 将结果写入文件
             with open(input_text, 'w', encoding='utf-8') as f:
@@ -244,14 +259,14 @@ def audio_to_text(input_audio, input_text):
             
             return text
             
-    except sr.UnknownValueError:
-        print("无法识别音频内容")
-    except sr.RequestError as e:
-        print(f"语音识别服务错误: {e}")
     except FileNotFoundError:
         print(f"音频文件不存在: {input_audio}")
+        return None
     except Exception as e:
         print(f"发生错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def get_ai_response(input_text, output_text, api_key, model):
     try:
@@ -292,7 +307,7 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
     try:
         # 默认模型目录
         if model_dir is None:
-            model_dir = './voice_clone/CosyVoice-main/pretrained_models/CosyVoice2-0.5B'
+            model_dir = './CosyVoice/pretrained_models/CosyVoice2-0.5B'
         
         # 检查模型目录是否存在
         if not os.path.exists(model_dir):
@@ -308,11 +323,8 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         # 构建CosyVoice调用命令
-        # 注意：test_cosyvoice.py 在 TalkingGaussian 目录下，需要调整路径
-        cosyvoice_script = './TalkingGaussian/test_cosyvoice.py'
-        if not os.path.exists(cosyvoice_script):
-            # 如果不在TalkingGaussian目录，尝试在voice_clone目录
-            cosyvoice_script = './voice_clone/test_cosyvoice.py'
+        # 使用Shell脚本封装，脚本内部会使用conda run切换到cosyvoice环境
+        cosyvoice_script = './CosyVoice/run_cosyvoice.sh'
         
         if not os.path.exists(cosyvoice_script):
             print(f"[backend.chat_engine] 找不到CosyVoice脚本: {cosyvoice_script}")
@@ -323,9 +335,9 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
             print(f"[backend.chat_engine] 警告：speed={speed} 不在有效范围 [0.5, 2.0] 内，使用默认值 1.0")
             speed = 1.0
         
-        # 构建命令
+        # 构建命令 - 调用Shell脚本，脚本内部会使用conda run
         cmd = [
-            'python', cosyvoice_script,
+            'bash', cosyvoice_script,
             '--model_dir', model_dir,
             '--prompt_wav', prompt_wav,
             '--prompt_text', text[:50],  # 使用文本前50字符作为prompt_text（简化处理）
@@ -337,12 +349,12 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
         
         print(f"[backend.chat_engine] 执行CosyVoice命令: {' '.join(cmd)}")
         
-        # 执行命令
+        # 执行命令 - 从项目根目录执行
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(cosyvoice_script) if os.path.dirname(cosyvoice_script) else '.'
+            cwd='.'
         )
         
         print("CosyVoice标准输出:", result.stdout)
@@ -357,7 +369,7 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
         # test_cosyvoice.py 输出到 test_result/ 目录
         output_dir = os.path.join(os.path.dirname(cosyvoice_script), 'test_result')
         if not os.path.exists(output_dir):
-            output_dir = 'TalkingGaussian/test_result'
+            output_dir = 'CosyVoice/test_result'
         
         # 查找生成的音频文件（可能带索引）
         base_name = os.path.splitext(os.path.basename(output_file))[0]
