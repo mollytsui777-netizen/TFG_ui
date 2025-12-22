@@ -1,4 +1,4 @@
-<!DOCTYPE html>  
+<!DOCTYPE html>
 <html lang="zh">  
 <head>  
     <meta charset="UTF-8">  
@@ -215,6 +215,10 @@
             box-shadow: 0 0 30px rgba(0, 229, 255, 0.4);  
             margin-bottom: 20px;  
             border: 2px solid var(--glass-border);  
+            width: 640px;  /* 统一视频显示尺寸 */  
+            height: 480px; /* 统一视频显示尺寸 */  
+            object-fit: contain; /* 保持视频比例 */  
+            background: #000; /* 黑色背景 */  
         }  
   
         .form-section {  
@@ -320,11 +324,11 @@
         }  
   
         @keyframes glowText {  
-            from {   
+            from {  
                 text-shadow: 0 0 20px var(--accent-color);  
                 filter: brightness(1);  
             }  
-            to {   
+            to {  
                 text-shadow: 0 0 35px var(--accent-color), 0 0 60px var(--primary-color);  
                 filter: brightness(1.3);  
             }  
@@ -335,16 +339,16 @@
             .video-page-container {  
                 flex-direction: column;  
             }  
-              
+  
             .form-section {  
                 border-left: none;  
                 border-top: 1px solid var(--glass-border);  
             }  
-              
+  
             h2 {  
                 font-size: 1.5rem;  
             }  
-              
+  
             .page-header {  
                 flex-direction: column;  
                 text-align: center;  
@@ -387,13 +391,22 @@
             0% { transform: rotate(0deg); }  
             100% { transform: rotate(360deg); }  
         }  
+        
+        /* 错误样式 */  
+        .error-input {  
+            border-color: #ff4757 !important;  
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.3) !important;  
+        }  
+        
+        .error-message {  
+            color: #ff4757;  
+            font-size: 12px;  
+            margin-top: 5px;  
+            display: none;  
+        }  
     </style>  
 </head>  
-<body class="subpage-bg"> 
-    <!-- 隐藏的音频元素 -->  
-    <audio id="bgMusic" loop>  
-        <source src="{{ url_for('static', filename='audio/background.mp3') }}" type="audio/mpeg">  
-    </audio> 
+<body class="subpage-bg">  
     <!-- 加载动画 -->  
     <div class="loading-overlay" id="loadingOverlay">  
         <div class="loading-spinner"></div>  
@@ -401,15 +414,19 @@
   
     <div class="page-header">  
         <button onclick="goHome()" class="back-btn">← 返回首页</button>  
-        <h2>🧠 模型训练界面</h2>  
+        <h2> 模型训练</h2>  
     </div>  
-      
+  
     <div class="video-page-container">  
         <!-- 左侧：训练结果视频 -->  
         <div class="video-display">  
-            <video id="trainVideo" controls width="420">  
+            <video id="trainVideo" controls>  
                 <source src="{{ url_for('static', filename='videos/sample.mp4') }}" type="video/mp4">  
+                您的浏览器不支持 video 标签。  
             </video>  
+            <div id="videoStatus" style="text-align: center; color: var(--accent-color); font-size: 14px; margin-top: 10px;">  
+                准备训练模型  
+            </div>  
         </div>  
   
         <!-- 右侧：输入框 -->  
@@ -417,16 +434,20 @@
             <form id="trainForm">  
                 <div class="form-group">  
                     <label>模型选择</label>  
-                    <select name="model_choice">  
-                        <option value="modelA">Model A</option>  
-                        <option value="modelB">Model B</option>  
+                    <select name="model_choice" id="model_choice" onchange="toggleEpochField()">  
+                        <!-- 添加：TalkingGaussian 选项 -->  
+                        <option value="TalkingGaussian">TalkingGaussian</option>  
                         <option value="SyncTalk">SyncTalk</option>  
                     </select>  
                 </div>  
   
                 <div class="form-group">  
-                    <label>参考视频/图像地址</label>  
-                    <input type="text" name="ref_video" placeholder="请输入参考视频或图像的相对路径">  
+                    <label>参考视频/图像地址 <span style="color: #ff4757;">*</span></label>  
+                    <input type="text" name="ref_video" id="ref_video" placeholder="请输入参考视频或图像的相对路径" required>  
+                    <div id="ref_video_error" class="error-message">请输入参考视频/图像地址</div>  
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 5px;">  
+                        例如：TalkingGaussian/data/May/May.mp4  
+                    </small>  
                 </div>  
   
                 <div class="form-group">  
@@ -437,14 +458,35 @@
                     </select>  
                 </div>  
   
-                <div class="form-group">  
+                <div class="form-group" id="epoch_group" style="display: none;">  
                     <label>Epoch（训练轮数）</label>  
-                    <input type="number" name="epoch" min="1" value="10">  
+                    <input type="number" name="epoch" id="epoch" min="1" value="10">  
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 5px;">  
+                        此参数仅对 SyncTalk 模型有效。TalkingGaussian 使用固定训练策略。  
+                    </small>  
                 </div>  
   
                 <div class="form-group">  
                     <label>自定义训练参数</label>  
                     <textarea name="custom_params" placeholder="请输入自定义参数..."></textarea>  
+                </div>  
+  
+                <!-- 添加：训练结果展示区域 -->  
+                <div id="training_result" style="display: none; margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid var(--glass-border);">  
+                    <h3 style="margin-top: 0; color: var(--accent-color);">训练完成</h3>  
+                    <div class="form-group">  
+                        <label>模型路径：</label>  
+                        <div style="display: flex; gap: 10px; align-items: center;">  
+                            <input type="text"  
+                                   id="model_path_output"  
+                                   readonly  
+                                   style="flex: 1; padding: 8px; border: 1px solid var(--glass-border); border-radius: 8px; background: rgba(255,255,255,0.1); color: var(--text-primary);">  
+                            <button type="button" onclick="copyModelPath()" style="padding: 8px 15px; border: 1px solid var(--glass-border); border-radius: 8px; background: rgba(0,198,255,0.2); color: var(--text-primary); cursor: pointer;">复制</button>  
+                        </div>  
+                        <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 5px;">  
+                            此路径可用于视频生成和实时对话中的"模型参数"字段  
+                        </small>  
+                    </div>  
                 </div>  
   
                 <button type="submit" class="generate-btn">🚀 Training!</button>  
@@ -458,7 +500,7 @@
             // 显示加载动画  
             const loadingOverlay = document.getElementById('loadingOverlay');  
             loadingOverlay.classList.add('active');  
-              
+  
             // 清除可能的缓存问题  
             if ('serviceWorker' in navigator) {  
                 navigator.serviceWorker.getRegistrations().then(function(registrations) {  
@@ -467,55 +509,230 @@
                     }  
                 });  
             }  
-              
+  
             // 强制刷新首页  
             setTimeout(() => {  
                 window.location.href = '/?t=' + new Date().getTime();  
             }, 300);  
         }  
   
-        document.getElementById('trainForm').addEventListener('submit', function (e) {  
-            e.preventDefault();  
-            const formData = new FormData(this);  
+        // EPOCH字段显示/隐藏控制  
+        function toggleEpochField() {  
+            const modelChoice = document.getElementById('model_choice').value;  
+            const epochGroup = document.getElementById('epoch_group');  
   
-            // 显示加载动画  
-            const loadingOverlay = document.getElementById('loadingOverlay');  
-            loadingOverlay.classList.add('active');  
-  
-            // 立即从表单获取视频路径并播放  
-            const refVideoPath = formData.get('ref_video');  
-            const videoEl = document.getElementById('trainVideo');  
-  
-            if (refVideoPath) {  
-                // 立即设置视频源并播放  
-                const newSrc = "/" + refVideoPath.replace("\\", "/") + '?t=' + new Date().getTime();  
-                videoEl.src = newSrc;  
-                videoEl.load();  
-                videoEl.play().catch(e => console.log('自动播放可能被阻止:', e));  
+            if (modelChoice === 'SyncTalk') {  
+                epochGroup.style.display = 'block';  
+            } else {  
+                epochGroup.style.display = 'none';  
             }  
+        }  
   
-            fetch('/model_training', {  
-                method: 'POST',  
-                body: formData  
-            })  
-                .then(res => res.json())  
-                .then(data => {  
-                    if (data.status === 'success') {  
-                        // 创建成功提示  
-                        showNotification('训练完成！', 'success');  
-                    }  
-                })  
-                .catch(err => {  
-                    console.error('错误:', err);  
-                    showNotification('训练失败，请重试', 'error');  
-                })  
-                .finally(() => {  
-                    // 隐藏加载动画  
-                    setTimeout(() => {  
-                        loadingOverlay.classList.remove('active');  
-                    }, 500);  
-                });  
-        });  
+        // 复制模型路径  
+        function copyModelPath() {  
+            const modelPathInput = document.getElementById('model_path_output');  
+            modelPathInput.select();  
+            document.execCommand('copy');  
+            showNotification('模型路径已复制到剪贴板', 'success');  
+        }  
+  
+        // 更新视频状态显示  
+        function updateVideoStatus(status, isError = false) {  
+            const statusEl = document.getElementById('videoStatus');  
+            if (statusEl) {  
+                statusEl.textContent = status;  
+                statusEl.style.color = isError ? '#ff4757' : 'var(--accent-color)';  
+            }  
+        }  
+  
+        // 重置视频显示  
+        function resetVideoDisplay() {  
+            const videoEl = document.getElementById('trainVideo');  
+            const statusEl = document.getElementById('videoStatus');  
+            
+            // 重置视频源到默认  
+            const defaultSrc = "{{ url_for('static', filename='videos/sample.mp4') }}";  
+            videoEl.src = defaultSrc + '?t=' + new Date().getTime();  
+            videoEl.load();  
+            
+            // 重置状态显示  
+            if (statusEl) {  
+                statusEl.textContent = '准备训练模型';  
+                statusEl.style.color = 'var(--accent-color)';  
+            }  
+        }  
+  
+        // 显示表单错误  
+        function showInputError(inputId, message) {  
+            const input = document.getElementById(inputId);  
+            const errorDiv = document.getElementById(inputId + '_error');  
+            
+            if (input && errorDiv) {  
+                input.classList.add('error-input');  
+                errorDiv.textContent = message;  
+                errorDiv.style.display = 'block';  
+            }  
+        }  
+  
+        // 清除表单错误  
+        function clearInputError(inputId) {  
+            const input = document.getElementById(inputId);  
+            const errorDiv = document.getElementById(inputId + '_error');  
+            
+            if (input && errorDiv) {  
+                input.classList.remove('error-input');  
+                errorDiv.style.display = 'none';  
+            }  
+        }  
+  
+        // 表单验证  
+        function validateForm() {  
+            let isValid = true;  
+            
+            // 验证参考视频地址  
+            const refVideoInput = document.getElementById('ref_video');  
+            const refVideoValue = refVideoInput.value.trim();  
+            
+            if (!refVideoValue) {  
+                showInputError('ref_video', '请输入参考视频/图像地址');  
+                isValid = false;  
+            } else {  
+                clearInputError('ref_video');  
+            }  
+            
+            // 如果选择SyncTalk，验证epoch  
+            const modelChoice = document.getElementById('model_choice').value;  
+            if (modelChoice === 'SyncTalk') {  
+                const epochInput = document.getElementById('epoch');  
+                const epochValue = parseInt(epochInput.value);  
+                
+                if (isNaN(epochValue) || epochValue < 1) {  
+                    showInputError('epoch', '请输入有效的训练轮数（大于0）');  
+                    isValid = false;  
+                } else {  
+                    clearInputError('epoch');  
+                }  
+            }  
+            
+            return isValid;  
+        }  
+  
+            document.getElementById('trainForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        // 验证表单
+        if (!validateForm()) {
+            showNotification('请填写所有必填字段', 'error');
+            return;
+        }
+
+        const formData = new FormData(this);
+
+        // 显示加载动画
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        loadingOverlay.classList.add('active');
+
+        // 更新状态
+        updateVideoStatus('正在训练模型...');
+
+        // 立即从表单获取视频路径并播放
+        const refVideoPath = formData.get('ref_video');
+        const videoEl = document.getElementById('trainVideo');
+
+        if (refVideoPath) {
+            // 立即设置视频源并播放
+            const newSrc = "/" + refVideoPath.replace("\\", "/") + '?t=' + new Date().getTime();
+            videoEl.src = newSrc;
+            videoEl.load();
+            videoEl.play().catch(e => console.log('自动播放可能被阻止:', e));
+        }
+
+        fetch('/model_training', {
+            method: 'POST',
+            body: formData
+        })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP错误: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log("后端返回数据:", data);
+
+                if (data.status === 'success') {
+                    // 检查返回的是否是有效的模型路径
+                    const returnedPath = data.model_path || data.video_path || '';
+
+                    // 模型路径的特征：包含output/ 且不以.mp4结尾
+                    if (returnedPath.includes('output/') &&
+                        !returnedPath.endsWith('.mp4') &&
+                        !returnedPath.endsWith('.avi') &&
+                        !returnedPath.endsWith('.mov')) {
+
+                        // 训练成功：停止播放视频，显示训练完成画面
+                        videoEl.pause();
+                        videoEl.currentTime = 0;
+
+                        // 可以显示一个训练完成的静态图像或提示
+                        // 这里我们保持视频为参考视频，但暂停在开头
+
+                        document.getElementById('model_path_output').value = returnedPath;
+                        document.getElementById('training_result').style.display = 'block';
+                        updateVideoStatus('训练完成！模型路径: ' + returnedPath);
+                        showNotification('训练完成！', 'success');
+
+                    } else if (returnedPath.includes('TalkingGaussian/data/') ||
+                               returnedPath.endsWith('.mp4')) {
+                        // 训练失败
+                        console.warn('训练失败，返回了视频路径:', returnedPath);
+                        resetVideoDisplay();
+                        updateVideoStatus('训练失败：请检查文件路径和预处理', true);
+                        showNotification('训练失败：请检查参考视频路径和预处理配置', 'error');
+                    } else {
+                        // 其他情况
+                        if (data.message && (data.message.includes('失败') ||
+                            data.message.includes('错误') ||
+                            data.message.includes('not found'))) {
+                            resetVideoDisplay();
+                            updateVideoStatus('训练失败: ' + data.message, true);
+                            showNotification('训练失败：' + data.message, 'error');
+                        } else {
+                            // 默认成功
+                            videoEl.pause();
+                            videoEl.currentTime = 0;
+                            document.getElementById('model_path_output').value = returnedPath || '未知路径';
+                            document.getElementById('training_result').style.display = 'block';
+                            updateVideoStatus('训练完成！', true);
+                            showNotification('训练完成！', 'success');
+                        }
+                    }
+                } else if (data.status === 'error') {
+                    // 后端明确返回错误
+                    resetVideoDisplay();
+                    updateVideoStatus('训练失败: ' + (data.message || '未知错误'), true);
+                    showNotification('训练失败：' + (data.message || '未知错误'), 'error');
+                } else {
+                    // 没有status字段或其他情况
+                    resetVideoDisplay();
+                    updateVideoStatus('训练失败：服务器返回数据格式异常', true);
+                    showNotification('训练失败：服务器返回数据格式异常', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('请求错误:', err);
+                resetVideoDisplay();
+                updateVideoStatus('请求错误：' + err.message, true);
+                showNotification('训练失败，请检查网络连接或服务器状态', 'error');
+            })
+            .finally(() => {
+                // 隐藏加载动画
+                setTimeout(() => {
+                    loadingOverlay.classList.remove('active');
+                }, 500);
+            });
+    });
+
   
         // 通知提示函数  
         function showNotification(message, type) {  
@@ -534,9 +751,9 @@
                 font-weight: bold;  
             `;  
             notification.textContent = message;  
-              
+  
             document.body.appendChild(notification);  
-              
+  
             setTimeout(() => {  
                 notification.style.animation = 'slideOut 0.3s ease';  
                 setTimeout(() => notification.remove(), 300);  
@@ -565,36 +782,59 @@
             if (savedTheme === 'light') {  
                 body.classList.add('light-theme');  
             }  
+  
+            // 初始化EPOCH字段状态  
+            toggleEpochField();  
+  
+            // 监听输入框变化，清除错误状态  
+            const refVideoInput = document.getElementById('ref_video');  
+            if (refVideoInput) {  
+                refVideoInput.addEventListener('input', function() {  
+                    if (this.value.trim()) {  
+                        clearInputError('ref_video');  
+                    }  
+                });  
+            }  
             
+            const epochInput = document.getElementById('epoch');  
+            if (epochInput) {  
+                epochInput.addEventListener('input', function() {  
+                    const value = parseInt(this.value);  
+                    if (!isNaN(value) && value > 0) {  
+                        clearInputError('epoch');  
+                    }  
+                });  
+            }  
+  
             // 恢复全屏状态  
             const wasFullscreen = localStorage.getItem('isFullscreen') === 'true';  
             if (wasFullscreen && !document.fullscreenElement) {  
                 // 如果之前是全屏状态，自动进入全屏  
                 document.documentElement.requestFullscreen().catch(e => {  
                     console.log('自动全屏失败:', e);  
-                const restoreFullscreen = () => {
-                document.documentElement.requestFullscreen().catch(e => console.error(e));
-                // 移除监听器，确保只触发一次
-                document.removeEventListener('click', restoreFullscreen);
-                document.removeEventListener('touchstart', restoreFullscreen);
-            };
-
-            // 监听点击和触摸（适配移动端）
-            document.addEventListener('click', restoreFullscreen, { once: true });
-            document.addEventListener('touchstart', restoreFullscreen, { once: true });
-            
-           
-           showNotification('点击任意位置恢复全屏', 'info'); 
-        });
-    }
-            
+                const restoreFullscreen = () => {  
+                document.documentElement.requestFullscreen().catch(e => console.error(e));  
+                // 移除监听器，确保只触发一次  
+                document.removeEventListener('click', restoreFullscreen);  
+                document.removeEventListener('touchstart', restoreFullscreen);  
+            };  
+  
+            // 监听点击和触摸（适配移动端）  
+            document.addEventListener('click', restoreFullscreen, { once: true });  
+            document.addEventListener('touchstart', restoreFullscreen, { once: true });  
+  
+  
+           showNotification('点击任意位置恢复全屏', 'info');  
+        });  
+    }  
+  
             // 监听全屏状态变化  
             document.addEventListener('fullscreenchange', function() {  
                 const isFullscreen = !!document.fullscreenElement;  
                 localStorage.setItem('isFullscreen', isFullscreen.toString());  
             });  
-            
-        }); 
+  
+        });  
     </script>  
 </body>  
 </html>
