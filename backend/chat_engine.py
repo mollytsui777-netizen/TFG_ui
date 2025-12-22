@@ -1,6 +1,7 @@
 import os
 import subprocess
 import shutil
+import tempfile
 import speech_recognition as sr
 from zhipuai import ZhipuAI
 from backend.llm_service import query_llm 
@@ -223,52 +224,121 @@ def chat_response(data):
         traceback.print_exc()
         return os.path.join("static", "videos", "chat_response.mp4")
 
+def _ffmpeg_to_wav16k_mono(src_path: str, dst_path: str):
+    """
+    使用 ffmpeg 将任意格式音频转换为 16kHz 单声道 WAV
+    支持 WebM/Opus, MP3, MP4 等格式
+    """
+    cmd = [
+        "ffmpeg",
+        "-y",  # 覆盖输出文件
+        "-i", src_path,
+        "-vn",  # 丢弃视频流（如果有）
+        "-ac", "1",  # 单声道
+        "-ar", "16000",  # 16kHz 采样率
+        "-f", "wav",  # WAV 格式
+        dst_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg转换失败: {result.stderr}")
+
+def transcribe_vosk(wav16k_path: str, model_dir: str):
+    """
+    使用 Vosk 进行离线语音识别
+    返回识别文本
+    """
+    try:
+        from vosk import Model, KaldiRecognizer
+    except ImportError:
+        raise RuntimeError("Vosk未安装，请运行: pip install vosk>=0.3.45")
+    
+    if not os.path.exists(model_dir) or not os.path.isdir(model_dir):
+        raise RuntimeError(f"Vosk模型目录不存在: {model_dir}")
+    
+    model = Model(model_dir)
+    rec = KaldiRecognizer(model, 16000)
+    
+    final_text_parts = []
+    
+    with open(wav16k_path, "rb") as f:
+        while True:
+            data = f.read(4000)
+            if len(data) == 0:
+                break
+            if rec.AcceptWaveform(data):
+                import json
+                j = json.loads(rec.Result())
+                if j.get("text"):
+                    final_text_parts.append(j["text"])
+    
+    import json
+    j = json.loads(rec.FinalResult())
+    if j.get("text"):
+        final_text_parts.append(j["text"])
+    
+    text = " ".join([t for t in final_text_parts if t]).strip()
+    return text
+
 def audio_to_text(input_audio, input_text):
     """
     语音识别（ASR）
-    优先使用Google语音识别，如果网络不可用则使用fallback文本
+    使用 Vosk 离线语音识别，支持 WebM/Opus 等格式
     """
+    # Vosk 模型目录（中文模型）
+    vosk_model_dir = os.getenv(
+        'VOSK_MODEL_DIR',
+        './CosyVoice/asset/vosk-model-small-cn-0.22'  # 默认中文模型路径
+    )
+    
+    # 如果中文模型不存在，尝试英文模型
+    if not os.path.exists(vosk_model_dir):
+        vosk_model_dir = './CosyVoice/asset/vosk-model-small-en-us-0.15'
+        print(f"[ASR] 中文模型不存在，使用英文模型: {vosk_model_dir}")
+    
     try:
-        # 初始化识别器
-        recognizer = sr.Recognizer()
+        if not os.path.exists(input_audio):
+            print(f"[ASR] 音频文件不存在: {input_audio}")
+            return None
         
-        # 加载音频文件
-        with sr.AudioFile(input_audio) as source:
-            # 调整环境噪声
-            recognizer.adjust_for_ambient_noise(source)
-            # 读取音频数据
-            audio_data = recognizer.record(source)
+        print("[ASR] 开始语音识别...")
+        
+        # 使用临时目录进行格式转换
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wav16k_path = os.path.join(temp_dir, "input_16k_mono.wav")
             
-            print("正在识别语音...")
-            
-            # 尝试使用Google语音识别
+            # 步骤1: 使用 ffmpeg 转换音频格式（支持 WebM/Opus）
             try:
-                text = recognizer.recognize_google(audio_data, language='zh-CN')
-                print(f"✅ Google语音识别成功")
-            except sr.RequestError as e:
-                print(f"⚠️  Google语音识别服务不可用: {e}")
-                print("💡 使用fallback文本（测试模式）")
-                # 使用fallback文本（用于测试）
-                text = "你好，这是一个测试。请告诉我你能做什么？"
-                print(f"📝 Fallback文本: {text}")
-            except sr.UnknownValueError:
-                print("⚠️  无法识别音频内容，使用fallback文本")
-                text = "你好，这是一个测试。请告诉我你能做什么？"
+                _ffmpeg_to_wav16k_mono(input_audio, wav16k_path)
+                print("[ASR] 音频格式转换完成")
+            except Exception as e:
+                print(f"[ASR] 音频格式转换失败: {e}")
+                return None
             
-            # 将结果写入文件
-            with open(input_text, 'w', encoding='utf-8') as f:
-                f.write(text)
+            # 步骤2: 使用 Vosk 进行识别
+            try:
+                text = transcribe_vosk(wav16k_path, vosk_model_dir)
+                if not text:
+                    print("[ASR] 识别结果为空")
+                    return None
                 
-            print(f"语音识别完成！结果已保存到: {input_text}")
-            print(f"识别结果: {text}")
-            
-            return text
-            
-    except FileNotFoundError:
-        print(f"音频文件不存在: {input_audio}")
-        return None
+                print(f"[ASR] ✅ Vosk识别成功: {text}")
+            except Exception as e:
+                print(f"[ASR] Vosk识别失败: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+        
+        # 步骤3: 保存识别结果
+        os.makedirs(os.path.dirname(input_text), exist_ok=True)
+        with open(input_text, 'w', encoding='utf-8') as f:
+            f.write(text)
+        
+        print(f"[ASR] 识别结果已保存到: {input_text}")
+        return text
+        
     except Exception as e:
-        print(f"发生错误: {e}")
+        print(f"[ASR] 发生错误: {e}")
         import traceback
         traceback.print_exc()
         return None
