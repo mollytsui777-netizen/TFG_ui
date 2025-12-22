@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 import shutil
+import glob
 from pathlib import Path
 
 def extract_relative_path(path_str, required_folder=None):
@@ -148,27 +149,56 @@ def generate_video(data):
             if result.stderr:
                 print("命令标准错误:", result.stderr)
             
-            # 检查输出文件是否存在
+            # 检查输出文件是否存在（可能是不带时间戳的）
             if os.path.exists(destination_path):
-                print(f"[backend.video_generator] 视频生成完成，路径：{destination_path}")
-                return destination_path
-            else:
-                # 尝试查找 test_result 目录中的文件
-                audio_basename = os.path.splitext(os.path.basename(audio_path))[0]
-                test_result_dir = "TalkingGaussian/test_result"
-                if os.path.exists(test_result_dir):
-                    # 查找最新的 final.mp4 文件
-                    final_files = [f for f in os.listdir(test_result_dir) 
-                                 if f.startswith(audio_basename) and f.endswith('_final.mp4')]
-                    if final_files:
-                        latest_file = max(final_files, key=lambda f: os.path.getctime(os.path.join(test_result_dir, f)))
-                        source_path = os.path.join(test_result_dir, latest_file)
-                        shutil.copy(source_path, destination_path)
-                        print(f"[backend.video_generator] 找到生成的视频文件: {destination_path}")
-                        return destination_path
+                # 检查文件时间，确保是新生成的（允许10秒误差）
+                file_mtime = os.path.getmtime(destination_path)
+                current_time = time.time()
+                if current_time - file_mtime <= 60:  # 1分钟内生成的文件
+                    print(f"[backend.video_generator] 视频生成完成，路径：{destination_path}")
+                    return destination_path
+            
+            # 查找实际生成的带时间戳的文件
+            audio_basename = os.path.splitext(os.path.basename(audio_path))[0]
+            video_dir = os.path.dirname(destination_path)
+            video_basename = os.path.splitext(os.path.basename(destination_path))[0]
+            
+            # 查找匹配的带时间戳的文件
+            pattern = os.path.join(video_dir, f"{video_basename}_*.mp4")
+            matching_files = glob.glob(pattern)
+            
+            if matching_files:
+                # 找到最新的文件（按修改时间）
+                latest_file = max(matching_files, key=os.path.getmtime)
+                latest_mtime = os.path.getmtime(latest_file)
+                current_time = time.time()
                 
-                print(f"[backend.video_generator] 视频文件不存在: {destination_path}")
-                return os.path.join("static", "videos", "out.mp4")
+                # 检查是否是新生成的文件（1分钟内）
+                if current_time - latest_mtime <= 60:
+                    print(f"[backend.video_generator] 找到新生成的视频文件: {latest_file}")
+                    return latest_file
+                else:
+                    print(f"[backend.video_generator] 找到文件但时间过旧: {latest_file}")
+            
+            # 尝试查找 test_result 目录中的文件
+            test_result_dir = "TalkingGaussian/test_result"
+            if os.path.exists(test_result_dir):
+                # 查找最新的 final.mp4 文件
+                final_files = [f for f in os.listdir(test_result_dir) 
+                             if f.startswith(audio_basename) and f.endswith('_final.mp4')]
+                if final_files:
+                    latest_file = max(final_files, key=lambda f: os.path.getmtime(os.path.join(test_result_dir, f)))
+                    source_path = os.path.join(test_result_dir, latest_file)
+                    # 复制到目标位置（带时间戳）
+                    ts = time.strftime('%Y%m%d_%H%M%S')
+                    video_name, video_ext = os.path.splitext(os.path.basename(destination_path))
+                    timestamped_path = os.path.join(video_dir, f"{video_name}_{ts}{video_ext}")
+                    shutil.copy(source_path, timestamped_path)
+                    print(f"[backend.video_generator] 从test_result复制到: {timestamped_path}")
+                    return timestamped_path
+                
+            print(f"[backend.video_generator] 视频文件不存在: {destination_path}")
+            return os.path.join("static", "videos", "out.mp4")
             
         except subprocess.CalledProcessError as e:
             print(f"[backend.video_generator] 命令执行失败: {e}")
