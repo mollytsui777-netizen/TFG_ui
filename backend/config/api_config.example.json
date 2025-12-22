@@ -1,0 +1,21 @@
+{
+  "openai": {
+    "api_key": "sk-xxxxxxxx",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-3.5-turbo",
+    "enabled": true
+  },
+  "zhipu": {
+    "api_key": "31af4e1567ad48f49b6d7b914b4145fb.MDVLvMiePGYLRJ7M",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "model": "glm-4",
+    "enabled": false
+  },
+  "deepseek": {
+    "api_key": "sk-your-deepseek-api-key-here",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "enabled": true
+  }
+}
+

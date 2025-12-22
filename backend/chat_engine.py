@@ -110,7 +110,7 @@ def chat_response(data):
         # api_key = os.getenv('ZHIPU_API_KEY', '31af4e1567ad48f49b6d7b914b4145fb.MDVLvMiePGYLRJ7M')
         # model = "glm-4-plus"
         # reply_text = get_ai_response(input_text, output_text, api_key, model)
-        api_choice = data.get('api_choice', 'Zhipu AI')
+        api_choice = data.get('api_choice', 'zhipu')
         reply_text = query_llm(recognized_text, api_choice)
         # 将回复保存到文件（保持原有逻辑的副作用）
         with open(output_text, 'w', encoding='utf-8') as f:

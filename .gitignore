@@ -28,3 +28,6 @@ TalkingGaussian/evaluation/_work/
 *.swo
 *~
 .DS_Store
+
+# API配置文件
+backend/config/api_config.json
