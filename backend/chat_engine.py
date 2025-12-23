@@ -8,9 +8,10 @@ from zhipuai import ZhipuAI
 from backend.llm_service import query_llm 
 # 预设音色配置
 PRESET_VOICES = {
-    "default": "./CosyVoice/asset/zero_shot_prompt.wav",
-    "cross_lingual": "./CosyVoice/asset/cross_lingual_prompt.wav",
-    "may": "./static/uploads/audios/may_reference.wav",  # 从 May 视频提取的音频
+    "default": "./CosyVoice/asset/zero_shot_prompt.wav",          # 中文女声
+    "cross_lingual": "./CosyVoice/asset/cross_lingual_prompt.wav",# 中文男声
+    "may": "./static/uploads/audios/may_reference.wav",           # May 英文长音频
+    "may_en": "./static/uploads/audios/may_short.wav",            # May 英文女声（裁剪版，推荐）
     # 可以继续添加更多预设音色
     # "voice1": "./CosyVoice/asset/voice1.wav",
     # "voice2": "./CosyVoice/asset/voice2.wav",
