@@ -464,29 +464,27 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
             return None
         
         # 查找生成的音频文件
-        # test_cosyvoice.py 输出到 test_result/ 目录
-        output_dir = os.path.join(os.path.dirname(cosyvoice_script), 'test_result')
-        if not os.path.exists(output_dir):
-            output_dir = 'CosyVoice/test_result'
-        
-        # 查找生成的音频文件（可能带索引）
+        # test_cosyvoice.py 默认输出到 "test_result/"，有时是项目根目录下的 test_result，也可能是 CosyVoice/test_result
+        candidate_dirs = [
+            os.path.join(os.path.dirname(cosyvoice_script), 'test_result'),
+            'CosyVoice/test_result',
+            'test_result'
+        ]
         base_name = os.path.splitext(os.path.basename(output_file))[0]
         generated_files = []
-        if os.path.exists(output_dir):
-            for f in os.listdir(output_dir):
-                if f.startswith(base_name) and f.endswith('.wav'):
-                    generated_files.append(os.path.join(output_dir, f))
-        
+        for d in candidate_dirs:
+            if os.path.exists(d):
+                for f in os.listdir(d):
+                    if f.startswith(base_name) and f.endswith('.wav'):
+                        generated_files.append(os.path.join(d, f))
         if generated_files:
-            # 使用最新的文件
             latest_file = max(generated_files, key=lambda f: os.path.getctime(f))
-            # 复制到目标位置（固定名称，供后续流程使用）
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
             shutil.copy(latest_file, output_file)
             print(f"[backend.chat_engine] 语音克隆完成: {output_file}")
             return output_file
-        else:
-            print(f"[backend.chat_engine] 未找到生成的音频文件")
-            return None
+        print(f"[backend.chat_engine] 未找到生成的音频文件")
+        return None
             
     except Exception as e:
         print(f"[backend.chat_engine] 语音克隆错误: {e}")
