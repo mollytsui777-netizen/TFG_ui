@@ -16,7 +16,7 @@ PRESET_VOICES = {
     # "voice2": "./CosyVoice/asset/voice2.wav",
 }
 
-def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_voice_file=None, fallback_voice_clone=None):
+def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_voice_file=None, custom_voice_path=None, fallback_voice_clone=None):
     """
     根据选择类型获取语音克隆参考音频路径
     
@@ -66,16 +66,19 @@ def get_voice_clone_reference(voice_clone_type, preset_voice_name=None, custom_v
         return PRESET_VOICES.get("default", "./CosyVoice/asset/zero_shot_prompt.wav")
     
     elif voice_clone_type == "custom":
-        # 使用自定义上传的音频
+        # 优先使用用户输入的完整路径；否则回落到 custom_voice_file（custom_voice 目录）
+        if custom_voice_path and os.path.exists(custom_voice_path):
+            print(f"[backend.chat_engine] 使用自定义音频(路径): {custom_voice_path}")
+            return custom_voice_path
         if custom_voice_file:
             reference_path = f"./static/audios/custom_voice/{custom_voice_file}"
             if os.path.exists(reference_path):
-                print(f"[backend.chat_engine] 使用自定义音频: {reference_path}")
+                print(f"[backend.chat_engine] 使用自定义音频(文件名): {reference_path}")
                 return reference_path
             else:
                 print(f"[backend.chat_engine] 自定义音频文件不存在: {reference_path}，使用默认预设音色")
         else:
-            print(f"[backend.chat_engine] 未提供自定义音频文件名，使用默认预设音色")
+            print(f"[backend.chat_engine] 未提供自定义音频文件，使用默认预设音色")
         # 使用默认预设音色
         return PRESET_VOICES.get("default", "./CosyVoice/asset/zero_shot_prompt.wav")
     
@@ -143,12 +146,14 @@ def chat_response(data):
         voice_clone_type = data.get('voice_clone_type')
         preset_voice_name = data.get('preset_voice_name')
         custom_voice_file = data.get('custom_voice_file')
+        custom_voice_path = data.get('custom_voice_path')
         fallback_voice_clone = data.get('voice_clone')  # 兼容旧版本
         
         voice_clone_ref = get_voice_clone_reference(
             voice_clone_type=voice_clone_type,
             preset_voice_name=preset_voice_name,
             custom_voice_file=custom_voice_file,
+            custom_voice_path=custom_voice_path,
             fallback_voice_clone=fallback_voice_clone
         )
         
@@ -403,10 +408,16 @@ def text_to_speech_cosyvoice(text, prompt_wav, output_file, language='zh', model
         生成的音频文件路径，失败返回None
     """
     try:
-        # 默认模型目录
+        # 统一绝对路径，避免 run_cosyvoice.sh 内部 cd 导致路径错位
+        cosyvoice_root = os.path.abspath('./CosyVoice')
         if model_dir is None:
-            model_dir = './CosyVoice/pretrained_models/CosyVoice2-0.5B'
-        
+            model_dir = os.path.join(cosyvoice_root, 'pretrained_models', 'CosyVoice2-0.5B')
+        else:
+            model_dir = os.path.abspath(model_dir)
+
+        prompt_wav = os.path.abspath(prompt_wav)
+        output_file = os.path.abspath(output_file)
+
         # 检查模型目录是否存在
         if not os.path.exists(model_dir):
             print(f"[backend.chat_engine] CosyVoice模型目录不存在: {model_dir}")
