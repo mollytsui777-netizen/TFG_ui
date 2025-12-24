@@ -57,7 +57,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # 默认不启动，需要时手动运行：docker-compose run tfg_eval --pred_dir /app/pred --gt_dir /app/gt
+    # 默认不启动，需要时手动运行：
+    # docker-compose run --rm tfg_eval --pred-video /app/pred/video.mp4 --gt-video /app/gt/video.mp4 --all
     profiles:
       - eval
 
