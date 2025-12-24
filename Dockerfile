@@ -39,7 +39,7 @@ RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
     bash /tmp/miniconda.sh -b -p /opt/conda && \
     rm /tmp/miniconda.sh && \
-    /opt/conda/bin/conda clean -tipsy && \
+    /opt/conda/bin/conda clean --all -y && \
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate base" >> ~/.bashrc
@@ -53,9 +53,23 @@ COPY TalkingGaussian/environment.yml /app/TalkingGaussian/
 COPY CosyVoice/requirements.txt /app/CosyVoice/
 COPY TalkingGaussian/evaluation/requirements_eval.txt /app/TalkingGaussian/evaluation/
 
+# 复制子模块目录（environment.yml 需要这些路径）
+COPY TalkingGaussian/submodules /app/TalkingGaussian/submodules
+COPY TalkingGaussian/gridencoder /app/TalkingGaussian/gridencoder
+
 # 创建 TalkingGaussian 环境（Python 3.7.13, PyTorch 1.12.1, CUDA 11.3）
+# 设置 CUDA 架构环境变量（解决构建时无法检测 GPU 的问题）
+# 只保留 PyTorch 1.12.1 + CUDA 11.3 支持的架构，去掉 8.9 / 9.0+PTX
+ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6" \
+    FORCE_CUDA=1
 RUN . /opt/conda/etc/profile.d/conda.sh && \
-    conda env create -f TalkingGaussian/environment.yml && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
+    conda config --set remote_connect_timeout_secs 120.0 && \
+    conda config --set remote_read_timeout_secs 600.0 && \
+    conda config --set remote_max_retries 10 && \
+    conda env create -f TalkingGaussian/environment.yml || \
+    (echo "First attempt failed, retrying..." && sleep 10 && conda env create -f TalkingGaussian/environment.yml) && \
     conda clean -afy
 
 # 创建 CosyVoice 环境（Python 3.10, PyTorch 2.3.1）
@@ -94,6 +108,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda clean -afy
 
 # 编译 TalkingGaussian 的扩展模块（diff-gaussian-rasterization, simple-knn, gridencoder）
+# 注意：TORCH_CUDA_ARCH_LIST 已在前面设置，这里会继承
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate talking_gaussian && \
     cd TalkingGaussian && \
